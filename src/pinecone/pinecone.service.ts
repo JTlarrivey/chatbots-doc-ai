@@ -25,11 +25,9 @@ export class PineconeService {
   async indexDocument(id: string, text: string) {
     const index = this.pinecone.Index(this.indexName);
 
-    // Generar embedding
     const embedding = await this.embeddingsService.getEmbedding(text);
     console.log(`Embedding generado para el documento ${id}:`, embedding);
 
-    // Verificar que la dimensión sea correcta
     if (embedding.length !== 1024) {
       throw new Error(
         `Embedding dimensions mismatch: expected 1024, got ${embedding.length}`,
@@ -43,8 +41,8 @@ export class PineconeService {
     };
 
     try {
-      const response = await index.upsert([vector]);
-      console.log(`Documento con ID ${id} indexado exitosamente`, response);
+      await index.upsert([vector]);
+      console.log(`Documento con ID ${id} indexado exitosamente`);
     } catch (error) {
       console.error(`Error al indexar documento ${id}:`, error);
       throw new Error(`Error al indexar documento ${id}: ${error.message}`);
@@ -57,12 +55,8 @@ export class PineconeService {
     const vectors = await Promise.all(
       documents.map(async (doc) => {
         const embedding = await this.embeddingsService.getEmbedding(doc.text);
-        console.log(
-          `Embedding generado para el documento ${doc.id}:`,
-          embedding,
-        );
+        console.log(`Embedding generado para el documento ${doc.id}`);
 
-        // Verificación de dimensión
         if (embedding.length !== 1024) {
           throw new Error(
             `Embedding dimensions mismatch: expected 1024, got ${embedding.length}`,
@@ -78,11 +72,38 @@ export class PineconeService {
     );
 
     try {
-      const response = await index.upsert(vectors);
-      console.log('Documentos indexados exitosamente', response);
+      await index.upsert(vectors);
+      console.log('Documentos indexados exitosamente');
     } catch (error) {
       console.error('Error al indexar documentos:', error);
       throw new Error(`Error al indexar documentos: ${error.message}`);
+    }
+  }
+
+  async searchDocuments(queryEmbedding: number[], topK = 10, threshold = 0.75) {
+    const index = this.pinecone.Index(this.indexName);
+
+    if (queryEmbedding.length !== 1024) {
+      throw new Error(
+        `Embedding dimensions mismatch: expected 1024, got ${queryEmbedding.length}`,
+      );
+    }
+
+    try {
+      const result = await index.query({
+        vector: queryEmbedding,
+        topK,
+        includeMetadata: true,
+      });
+
+      console.log('Resultados de búsqueda:', result);
+
+      return result.matches
+        .filter((match) => (match.score ?? 0) >= threshold)
+        .map((match) => match.metadata?.text);
+    } catch (error) {
+      console.error('Error en la búsqueda de documentos:', error);
+      throw new Error(`Error en la búsqueda de documentos: ${error.message}`);
     }
   }
 }
